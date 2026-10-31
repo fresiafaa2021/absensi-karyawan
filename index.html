@@ -1,0 +1,391 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Absensi Karyawan</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 20px;
+  background: #f1f3f6;
+  color: #222;
+}
+
+.container {
+  max-width: 1400px;
+  margin: auto;
+}
+
+h1 {
+  text-align: center;
+  color: #173b32;
+}
+
+.panel {
+  background: white;
+  padding: 18px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px #0001;
+}
+
+.controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+input, select, button {
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+button {
+  cursor: pointer;
+  background: #174c3b;
+  color: white;
+  border: none;
+}
+
+button:hover {
+  background: #226b52;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+  background: white;
+  border-radius: 10px;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 1000px;
+  text-align: center;
+}
+
+th, td {
+  border: 1px solid #ddd;
+  padding: 9px 5px;
+  font-size: 13px;
+}
+
+th {
+  background: #173b32;
+  color: white;
+  position: sticky;
+  top: 0;
+}
+
+.name {
+  position: sticky;
+  left: 0;
+  background: #f5f7f6;
+  min-width: 150px;
+  font-weight: bold;
+  z-index: 1;
+}
+
+th.name {
+  background: #173b32;
+  z-index: 2;
+}
+
+.cell {
+  cursor: pointer;
+  min-width: 35px;
+  font-weight: bold;
+}
+
+.cell:hover {
+  background: #e6f2eb;
+}
+
+.H { color: #168447; }
+.I { color: #d28b00; }
+.S { color: #2475c5; }
+.A { color: #dc3535; }
+.L { color: #777; }
+
+.summary {
+  background: white;
+  padding: 15px;
+  margin-top: 20px;
+  border-radius: 10px;
+}
+
+.legend {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+  margin-top: 15px;
+  font-size: 13px;
+}
+
+.footer {
+  margin-top: 20px;
+  color: #777;
+  font-size: 12px;
+  text-align: center;
+}
+
+@media(max-width:600px) {
+  body { padding: 10px; }
+  h1 { font-size: 22px; }
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<h1>ABSENSI KEHADIRAN KARYAWAN</h1>
+
+<div class="panel">
+  <div class="controls">
+
+    <input type="text" id="nama"
+      placeholder="Nama karyawan">
+
+    <button onclick="tambahKaryawan()">
+      + Tambah Karyawan
+    </button>
+
+    <input type="month" id="bulan">
+
+    <button onclick="downloadCSV()">
+      Download Laporan
+    </button>
+
+  </div>
+</div>
+
+<div class="table-wrapper">
+<table id="tabel">
+  <thead>
+    <tr id="header"></tr>
+  </thead>
+  <tbody id="isi"></tbody>
+</table>
+</div>
+
+<div class="summary">
+  <h3>Rekap Kehadiran</h3>
+  <div id="rekap"></div>
+
+  <div class="legend">
+    <span class="H">H = Hadir</span>
+    <span class="I">I = Izin</span>
+    <span class="S">S = Sakit</span>
+    <span class="A">A = Alpha</span>
+    <span class="L">L = Libur</span>
+  </div>
+</div>
+
+<div class="footer">
+  Sistem Absensi Karyawan
+</div>
+
+</div>
+
+<script>
+let karyawan = JSON.parse(
+  localStorage.getItem("karyawan")
+) || ["Andini", "Hasan", "Andi", "Putri", "Tata"];
+
+let absensi = JSON.parse(
+  localStorage.getItem("absensi")
+) || {};
+
+const bulanInput = document.getElementById("bulan");
+
+bulanInput.value = new Date().toISOString().slice(0,7);
+
+function simpan() {
+  localStorage.setItem("karyawan", JSON.stringify(karyawan));
+  localStorage.setItem("absensi", JSON.stringify(absensi));
+}
+
+function jumlahHari() {
+  let [tahun, bulan] = bulanInput.value.split("-").map(Number);
+  return new Date(tahun, bulan, 0).getDate();
+}
+
+function kunci(nama, tanggal) {
+  return bulanInput.value + "_" + nama + "_" + tanggal;
+}
+
+function render() {
+  let hari = jumlahHari();
+
+  let header = document.getElementById("header");
+  let isi = document.getElementById("isi");
+
+  header.innerHTML =
+    '<th class="name">Nama Karyawan</th>';
+
+  for(let i=1; i<=hari; i++) {
+    header.innerHTML += `<th>${i}</th>`;
+  }
+
+  header.innerHTML += "<th>Hadir</th><th>Izin</th><th>Sakit</th><th>Alpha</th>";
+
+  isi.innerHTML = "";
+
+  karyawan.forEach(nama => {
+
+    let hadir=0, izin=0, sakit=0, alpha=0;
+
+    let row = document.createElement("tr");
+
+    let html = `
+      <td class="name">${nama}</td>
+    `;
+
+    for(let t=1; t<=hari; t++) {
+      let status = absensi[kunci(nama,t)] || "";
+
+      if(status==="H") hadir++;
+      if(status==="I") izin++;
+      if(status==="S") sakit++;
+      if(status==="A") alpha++;
+
+      html += `
+        <td class="cell ${status}"
+          onclick="ubahStatus('${nama}',${t})">
+          ${status || "·"}
+        </td>
+      `;
+    }
+
+    html += `
+      <td>${hadir}</td>
+      <td>${izin}</td>
+      <td>${sakit}</td>
+      <td>${alpha}</td>
+    `;
+
+    row.innerHTML = html;
+    isi.appendChild(row);
+  });
+
+  document.getElementById("rekap").innerHTML =
+    `Jumlah karyawan: <b>${karyawan.length}</b>`;
+}
+
+function ubahStatus(nama, tanggal) {
+
+  let key = kunci(nama,tanggal);
+
+  let pilihan = ["H","I","S","A","L",""];
+
+  let sekarang = absensi[key] || "";
+  let index = pilihan.indexOf(sekarang);
+
+  let berikutnya = pilihan[
+    (index + 1) % pilihan.length
+  ];
+
+  if(berikutnya) {
+    absensi[key] = berikutnya;
+  } else {
+    delete absensi[key];
+  }
+
+  simpan();
+  render();
+}
+
+function tambahKaryawan() {
+  let nama = document.getElementById("nama").value.trim();
+
+  if(!nama) {
+    alert("Masukkan nama karyawan!");
+    return;
+  }
+
+  if(karyawan.includes(nama)) {
+    alert("Nama sudah terdaftar!");
+    return;
+  }
+
+  karyawan.push(nama);
+  document.getElementById("nama").value = "";
+
+  simpan();
+  render();
+}
+
+function downloadCSV() {
+  let hari = jumlahHari();
+
+  let data = [
+    ["Nama Karyawan",
+      ...Array.from({length:hari},(_,i)=>i+1),
+      "Hadir","Izin","Sakit","Alpha"]
+  ];
+
+  karyawan.forEach(nama => {
+    let jumlah = {H:0,I:0,S:0,A:0};
+
+    let baris = [nama];
+
+    for(let t=1; t<=hari; t++) {
+      let s = absensi[kunci(nama,t)] || "";
+      baris.push(s);
+
+      if(jumlah[s] !== undefined) {
+        jumlah[s]++;
+      }
+    }
+
+    baris.push(
+      jumlah.H,
+      jumlah.I,
+      jumlah.S,
+      jumlah.A
+    );
+
+    data.push(baris);
+  });
+
+  let csv = data.map(row =>
+    row.map(value =>
+      '"' + String(value).replace(/"/g,'""') + '"'
+    ).join(";")
+  ).join("\n");
+
+  let blob = new Blob(
+    ["\uFEFF" + csv],
+    {type:"text/csv;charset=utf-8;"}
+  );
+
+  let url = URL.createObjectURL(blob);
+  let a = document.createElement("a");
+
+  a.href = url;
+  a.download = "Absensi-" + bulanInput.value + ".csv";
+  a.click();
+
+  URL.revokeObjectURL(url);
+}
+
+bulanInput.addEventListener("change", render);
+
+render();
+</script>
+
+</body>
+  </html>
+      
